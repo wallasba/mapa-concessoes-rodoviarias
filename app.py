@@ -34,6 +34,7 @@ MAP_WIDTH = 1200
 MAP_HEIGHT = 660
 PORTABLE_MAP_WIDTH = 1200
 PORTABLE_MAP_HEIGHT = 660
+MAP_RENDER_VERSION = 2
 BASEMAPS = {
     "OpenStreetMap (raster)": "OpenStreetMap",
     "Sem mapa-base (mais leve)": None,
@@ -45,6 +46,9 @@ MAP_PROPERTIES = [
     "fase_rotulo",
     "status",
     "vl_extensao_km",
+    "dt_assinatura",
+    "dt_inicio",
+    "dt_fim",
 ]
 
 
@@ -59,6 +63,11 @@ def map_geojson(gdf_data: gpd.GeoDataFrame) -> dict:
     map_data["vl_extensao_km"] = pd.to_numeric(
         map_data["vl_extensao_km"], errors="coerce"
     ).round(1)
+    for column in ("dt_assinatura", "dt_inicio", "dt_fim"):
+        if column in map_data.columns:
+            map_data[column] = pd.to_datetime(map_data[column], errors="coerce").dt.strftime(
+                "%d/%m/%Y"
+            ).fillna("Sem informação")
     return json.loads(map_data.to_json(na="null", drop_id=True))
 
 
@@ -91,7 +100,15 @@ def build_map_html(gdf_data: gpd.GeoDataFrame, basemap_key: str) -> str:
         }
 
     tooltip_fields = [
-        field for field in ("vl_br", "nm_fantasia", "ds_trecho", "fase_rotulo")
+        field for field in (
+            "vl_br",
+            "nm_fantasia",
+            "ds_trecho",
+            "fase_rotulo",
+            "dt_assinatura",
+            "dt_inicio",
+            "dt_fim",
+        )
         if field in gdf_data.columns
     ]
     popup_fields = [field for field in MAP_PROPERTIES if field in gdf_data.columns]
@@ -118,7 +135,7 @@ def build_map_html(gdf_data: gpd.GeoDataFrame, basemap_key: str) -> str:
 
 def map_signature(df: pd.DataFrame, basemap_key: str | None = None) -> tuple:
     """Identifica a seleção sem serializar a geometria completa na sessão."""
-    return basemap_key, tuple(df.index.tolist())
+    return MAP_RENDER_VERSION, basemap_key, tuple(df.index.tolist())
 
 
 def build_portable_map_html(gdf_data: gpd.GeoDataFrame) -> str:
