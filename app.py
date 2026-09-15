@@ -1,5 +1,6 @@
 import json
 import math
+from html import escape
 
 import folium
 import geopandas as gpd
@@ -31,6 +32,8 @@ st.set_page_config(
 
 MAP_WIDTH = 1200
 MAP_HEIGHT = 660
+PORTABLE_MAP_WIDTH = 1200
+PORTABLE_MAP_HEIGHT = 660
 BASEMAPS = {
     "OpenStreetMap (raster)": "OpenStreetMap",
     "Sem mapa-base (mais leve)": None,
@@ -118,6 +121,55 @@ def map_signature(df: pd.DataFrame, basemap_key: str | None = None) -> tuple:
     return basemap_key, tuple(df.index.tolist())
 
 
+def build_portable_map_html(gdf_data: gpd.GeoDataFrame) -> str:
+    """Cria um HTML vetorial autocontido, sem tiles, CDN ou acesso externo."""
+    geoms = gdf_data["geometry_mapa"]
+    bounds = geoms.bounds
+    min_x, min_y = bounds[["minx", "miny"]].min()
+    max_x, max_y = bounds[["maxx", "maxy"]].max()
+    span_x = max(max_x - min_x, 0.01)
+    span_y = max(max_y - min_y, 0.01)
+    padding = 18
+    scale = min(
+        (PORTABLE_MAP_WIDTH - 2 * padding) / span_x,
+        (PORTABLE_MAP_HEIGHT - 2 * padding) / span_y,
+    )
+    offset_x = (PORTABLE_MAP_WIDTH - span_x * scale) / 2 - min_x * scale
+    offset_y = (PORTABLE_MAP_HEIGHT - span_y * scale) / 2 + max_y * scale
+
+    def point_to_svg(x, y):
+        return f"{x * scale + offset_x:.1f},{-y * scale + offset_y:.1f}"
+
+    paths = []
+    for _, row in gdf_data.iterrows():
+        geometry = row["geometry_mapa"]
+        parts = geometry.geoms if hasattr(geometry, "geoms") else [geometry]
+        title = escape(
+            f"BR {row.get('vl_br', '—')} | {row.get('nm_fantasia', 'Sem informação')} | "
+            f"{row.get('ds_trecho', 'Sem descrição')}"
+        )
+        color = FASE_COLORS.get(row.get("fase_rotulo"), "#7f7f7f")
+        for part in parts:
+            coords = list(part.coords)
+            if len(coords) < 2:
+                continue
+            path = "M " + " L ".join(point_to_svg(x, y) for x, y in coords)
+            paths.append(f'<path d="{path}" stroke="{color}"><title>{title}</title></path>')
+
+    return f'''<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Mapa de Concessões Rodoviárias</title>
+<style>
+body {{ margin: 24px; font-family: Arial, sans-serif; color: #1f2937; }}
+svg {{ width: 100%; max-height: 82vh; background: #f8fafc; border: 1px solid #dbe3eb; border-radius: 8px; }}
+path {{ fill: none; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; opacity: .86; }}
+path:hover {{ stroke: #111827; stroke-width: 3; opacity: 1; }}
+</style></head><body>
+<h1>Mapa de Concessões Rodoviárias</h1>
+<p>Mapa vetorial portátil, sem raster ou recursos externos. Passe o mouse sobre um trecho para ver seu resumo.</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PORTABLE_MAP_WIDTH} {PORTABLE_MAP_HEIGHT}" role="img" aria-label="Mapa de concessões rodoviárias">{''.join(paths)}</svg>
+</body></html>'''
+
+
 def serialize_geojson_export(df: gpd.GeoDataFrame) -> bytes:
     """Serializa GeoJSON apenas quando o usuário pede o download."""
     geo_cols = ["geometry"] + [column for column in DISPLAY_COLUMNS if column in df.columns]
@@ -188,9 +240,9 @@ def tab_mapa(df, basemap_key: str):
     if leilao_present:
         st.markdown(legend_html(leilao_present, LEILAO_COLORS), unsafe_allow_html=True)
     st.download_button(
-        "⬇️ Baixar mapa interativo (HTML)",
-        map_html.encode("utf-8"),
-        file_name="mapa_concessoes.html",
+        "⬇️ Baixar mapa portátil (HTML)",
+        build_portable_map_html(map_rows).encode("utf-8"),
+        file_name="mapa_concessoes_portatil.html",
         mime="text/html",
     )
 
@@ -344,6 +396,12 @@ def tab_historico():
             st.write(r["ALTERAÇÕES"])
 
 
+def clear_filter_keys(keys: list[str]) -> None:
+    """Limpa escolhas dependentes quando um filtro anterior é alterado."""
+    for key in keys:
+        st.session_state.pop(key, None)
+
+
 def sidebar_filters(df):
     st.sidebar.header("🛣️ Filtros")
     with st.sidebar.expander("Localização", expanded=True):
@@ -352,43 +410,61 @@ def sidebar_filters(df):
             sorted(df["sg_uf"].dropna().unique()),
             placeholder="Todas as UFs",
             key="f_uf",
+            on_change=clear_filter_keys,
+            args=(["f_br", "f_fase", "f_status", "f_concessao", "f_empresa", "f_ano"],),
         )
+        after_uf = apply_filters(df, ufs=ufs)
         brs = st.multiselect(
             "Rodovias (BR)",
-            sorted({str(x) for x in df["vl_br"].dropna().unique()}),
+            sorted({str(x) for x in after_uf["vl_br"].dropna().unique()}),
             placeholder="Todas as BRs",
             key="f_br",
+            on_change=clear_filter_keys,
+            args=(["f_fase", "f_status", "f_concessao", "f_empresa", "f_ano"],),
         )
+    after_location = apply_filters(after_uf, brs=brs)
     with st.sidebar.expander("Situação", expanded=True):
         fases = st.multiselect(
             "Fase",
-            [f for f in FASE_COLORS if f in set(df["fase_rotulo"].unique())],
+            [f for f in FASE_COLORS if f in set(after_location["fase_rotulo"].unique())],
             placeholder="Todas as fases",
             key="f_fase",
+            on_change=clear_filter_keys,
+            args=(["f_status", "f_concessao", "f_empresa", "f_ano"],),
         )
+        after_fase = apply_filters(after_location, fases=fases)
         statuses = st.multiselect(
             "Status",
-            [s for s in STATUS_ORDER if s in set(df["status"].unique())],
+            [s for s in STATUS_ORDER if s in set(after_fase["status"].unique())],
             placeholder="Todos os status",
             key="f_status",
+            on_change=clear_filter_keys,
+            args=(["f_concessao", "f_empresa", "f_ano"],),
         )
+    after_situacao = apply_filters(after_fase, statuses=statuses)
     with st.sidebar.expander("Concessão", expanded=False):
         concessions = st.multiselect(
             "Concessionária",
-            sorted(df["nm_fantasia"].dropna().unique()),
+            sorted(after_situacao["nm_fantasia"].dropna().unique()),
             placeholder="Todas",
             key="f_concessao",
+            on_change=clear_filter_keys,
+            args=(["f_empresa", "f_ano"],),
         )
+        after_concessao = apply_filters(after_situacao, concessions=concessions)
         empresas = st.multiselect(
             "Empresa (razão social)",
-            sorted(df["nm_empresa"].dropna().unique()),
+            sorted(after_concessao["nm_empresa"].dropna().unique()),
             placeholder="Todas",
             key="f_empresa",
+            on_change=clear_filter_keys,
+            args=(["f_ano"],),
         )
+    after_empresa = apply_filters(after_concessao, empresas=empresas)
     with st.sidebar.expander("Vencimento", expanded=False):
         anos = st.multiselect(
             "Ano de vencimento (dt_fim)",
-            sorted(df["dt_fim"].dropna().dt.year.astype(int).unique().tolist()),
+            sorted(after_empresa["dt_fim"].dropna().dt.year.astype(int).unique().tolist()),
             placeholder="Todos",
             key="f_ano",
         )
