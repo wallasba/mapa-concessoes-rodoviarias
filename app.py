@@ -1,4 +1,3 @@
-import base64
 import json
 import math
 
@@ -8,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit.components.v1 import html as st_html
 
 from data_loader import (
     COLUMN_LABELS,
@@ -31,6 +31,10 @@ st.set_page_config(
 
 MAP_WIDTH = 1200
 MAP_HEIGHT = 660
+BASEMAPS = {
+    "OpenStreetMap (raster)": "OpenStreetMap",
+    "Sem mapa-base (mais leve)": None,
+}
 MAP_PROPERTIES = [
     "vl_br",
     "nm_fantasia",
@@ -61,12 +65,12 @@ def valid_map_rows(gdf_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf_data.loc[~geometry.isna() & ~geometry.is_empty]
 
 
-def build_map_html(gdf_data: gpd.GeoDataFrame) -> str:
-    """Cria um Folium dinâmico sem tiles ou chamadas a APIs cartográficas."""
+def build_map_html(gdf_data: gpd.GeoDataFrame, basemap_key: str) -> str:
+    """Cria um Folium dinâmico com o mapa-base selecionado."""
     m = folium.Map(
         location=[-14.5, -51.0],
         zoom_start=5,
-        tiles=None,
+        tiles=BASEMAPS[basemap_key],
         height=MAP_HEIGHT,
         prefer_canvas=True,
         control_scale=True,
@@ -109,15 +113,9 @@ def build_map_html(gdf_data: gpd.GeoDataFrame) -> str:
     return m.get_root().render()
 
 
-def map_signature(df: pd.DataFrame) -> tuple:
+def map_signature(df: pd.DataFrame, basemap_key: str | None = None) -> tuple:
     """Identifica a seleção sem serializar a geometria completa na sessão."""
-    return tuple(df.index.tolist())
-
-
-def map_iframe_source(map_html: str) -> str:
-    """Entrega o HTML do Folium diretamente ao iframe, sem um servidor externo."""
-    encoded = base64.b64encode(map_html.encode("utf-8")).decode("ascii")
-    return f"data:text/html;charset=utf-8;base64,{encoded}"
+    return basemap_key, tuple(df.index.tolist())
 
 
 def serialize_geojson_export(df: gpd.GeoDataFrame) -> bytes:
@@ -153,7 +151,7 @@ def kpis(df):
     c5.metric("Em processo", f"{processo:,}")
 
 
-def tab_mapa(df):
+def tab_mapa(df, basemap_key: str):
     if len(df) == 0:
         st.warning("Nenhum segmento atende aos filtros selecionados.")
         return
@@ -166,12 +164,12 @@ def tab_mapa(df):
         f"**{len(map_rows):,} trechos** em mapa interativo. Arraste, amplie, clique em um segmento "
         f"para os atributos e passe o mouse para um resumo.",
     )
-    signature = map_signature(map_rows)
+    signature = map_signature(map_rows, basemap_key)
     current_signature = st.session_state.get("map_signature")
     refresh = st.button("Atualizar mapa com os filtros atuais", type="primary", key="map_refresh")
     if current_signature is None or refresh:
         with st.spinner("Preparando mapa interativo..."):
-            st.session_state["map_html"] = build_map_html(map_rows)
+            st.session_state["map_html"] = build_map_html(map_rows, basemap_key)
             st.session_state["map_signature"] = signature
         current_signature = signature
     if current_signature != signature:
@@ -179,7 +177,9 @@ def tab_mapa(df):
         return
 
     map_html = st.session_state["map_html"]
-    st.iframe(map_iframe_source(map_html), height=MAP_HEIGHT)
+    # Não informe ``width``: a API aceita apenas pixels nesse argumento e o
+    # iframe do componente ocupará automaticamente a largura disponível.
+    st_html(map_html, height=MAP_HEIGHT)
     st.markdown(legend_html(fase_order, FASE_COLORS), unsafe_allow_html=True)
     leilao_present = sorted(
         {v for v in df["situacao_leilao"].dropna().unique() if v in LEILAO_COLORS},
@@ -420,6 +420,11 @@ def main():
     st.title("🛣️ Mapa de Concessões Rodoviárias Federais")
     st.caption("Base do SNV — concessionárias de rodovias federais no Brasil.")
 
+    basemap_key = st.sidebar.selectbox(
+        "Mapa-base",
+        list(BASEMAPS),
+        help="OpenStreetMap usa tiles remotos; a opção sem mapa-base não faz essa requisição.",
+    )
     ufs, brs, fases, statuses, concessions, empresas, anos, km_range, search = sidebar_filters(data)
 
     filtered = apply_filters(
@@ -442,7 +447,7 @@ def main():
     )
 
     with tab1:
-        tab_mapa(filtered)
+        tab_mapa(filtered, basemap_key)
     with tab2:
         tab_estatisticas(filtered)
     with tab3:
