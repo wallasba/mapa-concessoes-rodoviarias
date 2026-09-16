@@ -12,7 +12,6 @@ from streamlit.components.v1 import html as st_html
 
 from data_loader import (
     COLUMN_LABELS,
-    DISPLAY_COLUMNS,
     FASE_COLORS,
     LEILAO_COLORS,
     STATUS_ORDER,
@@ -189,8 +188,9 @@ path:hover {{ stroke: #111827; stroke-width: 3; opacity: 1; }}
 
 def serialize_geojson_export(df: gpd.GeoDataFrame) -> bytes:
     """Serializa GeoJSON apenas quando o usuário pede o download."""
-    geo_cols = ["geometry"] + [column for column in DISPLAY_COLUMNS if column in df.columns]
-    geojson_export = df[geo_cols].copy()
+    geojson_export = gpd.GeoDataFrame(
+        formatted_table(df), geometry=df.geometry, crs=df.crs
+    )
     for column in geojson_export.select_dtypes(include=["datetime64", "datetimetz"]):
         geojson_export[column] = geojson_export[column].dt.strftime("%Y-%m-%d")
     return geojson_export.to_json(na="null").encode("utf-8")

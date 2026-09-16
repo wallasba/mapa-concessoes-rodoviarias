@@ -11,34 +11,6 @@ XLSX_PATH = os.path.join(PROJ_DIR, "dados", "base_concessoes_28-08-2026_.xlsx")
 # visualização nacional e evita enviar mais de um milhão de vértices ao navegador.
 MAP_SIMPLIFICATION_TOLERANCE = 0.002
 
-DISPLAY_COLUMNS = [
-    "vl_br",
-    "sg_uf",
-    "vl_codigo",
-    "ds_local_i",
-    "ds_local_f",
-    "vl_km_inic",
-    "vl_km_fina",
-    "vl_extensa",
-    "id_concessao",
-    "nm_fantasia",
-    "nm_empresa",
-    "nm_popular",
-    "sg_uf_concessoes",
-    "ds_trecho",
-    "vl_extensao_km",
-    "ds_fase",
-    "dt_assinatura",
-    "dt_inicio",
-    "dt_fim",
-    "dt_leilao",
-    "vl_prazo_anos",
-    "arquivo_origem",
-    "id_projeto",
-    "versao_snv",
-    "id_versao",
-]
-
 COLUMN_LABELS = {
     "vl_codigo": "Código (PNV)",
     "vl_br": "BR",
@@ -123,7 +95,7 @@ def load_data() -> gpd.GeoDataFrame:
 @st.cache_data(show_spinner=False)
 def load_dicionario() -> pd.DataFrame:
     sheet = pd.read_excel(XLSX_PATH, sheet_name="dicionario_de_dados")
-    sheet.columns = ["Coluna", "Tipo de dado", "Descrição"]
+    sheet.columns = [str(column).strip() for column in sheet.columns]
     return sheet
 
 
@@ -222,6 +194,11 @@ def apply_filters(
 
 
 def formatted_table(df: gpd.GeoDataFrame) -> pd.DataFrame:
-    """Retorna os campos originais, preservando a nomenclatura da base."""
-    cols = [c for c in DISPLAY_COLUMNS if c in df.columns]
+    """Usa o dicionário como fonte única de nomes e ordenação das colunas."""
+    dictionary = load_dicionario()
+    cols = [
+        column
+        for column in dictionary["Nome da Coluna"].dropna().astype(str)
+        if column in df.columns
+    ]
     return df[cols].copy()
