@@ -277,11 +277,11 @@ def tab_estatisticas(df):
         return
     c1, c2 = st.columns(2)
     with c1:
-        uf_km = df.groupby("sg_uf")["vl_extensao_km"].sum().sort_values(ascending=False)
+        uf_km = df.groupby("sg_uf_concessoes")["vl_extensao_km"].sum().sort_values(ascending=False)
         fig = px.bar(
             x=uf_km.index,
             y=uf_km.values,
-            labels={"x": "UF", "y": "km"},
+            labels={"x": "UF da concessão", "y": "km"},
             title="Extensão total por UF",
             color=uf_km.index,
             color_discrete_sequence=px.colors.qualitative.Set2,
@@ -423,9 +423,9 @@ def sidebar_filters(df):
     st.sidebar.header("🛣️ Filtros")
     with st.sidebar.expander("Localização", expanded=True):
         ufs = st.multiselect(
-            "Unidades da Federação",
-            sorted(df["sg_uf"].dropna().unique()),
-            placeholder="Todas as UFs",
+            "UF da concessão",
+            sorted(df["sg_uf_concessoes"].dropna().unique()),
+            placeholder="Todas as UFs de concessão",
             key="f_uf",
             on_change=clear_filter_keys,
             args=(["f_br", "f_fase", "f_status", "f_concessao", "f_empresa", "f_ano"],),

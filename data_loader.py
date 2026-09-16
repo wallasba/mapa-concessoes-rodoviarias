@@ -12,9 +12,9 @@ XLSX_PATH = os.path.join(PROJ_DIR, "dados", "base_concessoes_28-08-2026_.xlsx")
 MAP_SIMPLIFICATION_TOLERANCE = 0.002
 
 DISPLAY_COLUMNS = [
-    "vl_codigo",
     "vl_br",
     "sg_uf",
+    "vl_codigo",
     "ds_local_i",
     "ds_local_f",
     "vl_km_inic",
@@ -22,21 +22,21 @@ DISPLAY_COLUMNS = [
     "vl_extensa",
     "id_concessao",
     "nm_fantasia",
+    "nm_empresa",
     "nm_popular",
+    "sg_uf_concessoes",
     "ds_trecho",
     "vl_extensao_km",
+    "ds_fase",
     "dt_assinatura",
     "dt_inicio",
     "dt_fim",
     "dt_leilao",
     "vl_prazo_anos",
-    "nm_empresa",
-    "sg_uf_concessoes",
+    "arquivo_origem",
+    "id_projeto",
     "versao_snv",
-    "ds_fase",
-    "fase_rotulo",
-    "status",
-    "situacao_leilao",
+    "id_versao",
 ]
 
 COLUMN_LABELS = {
@@ -197,7 +197,7 @@ def apply_filters(
 ) -> gpd.GeoDataFrame:
     out = df.copy()
     if ufs:
-        out = out[out["sg_uf"].isin(ufs)]
+        out = out[out["sg_uf_concessoes"].isin(ufs)]
     if brs:
         brs = {str(b) for b in brs}
         out = out[out["vl_br"].astype(str).isin(brs)]
@@ -222,5 +222,6 @@ def apply_filters(
 
 
 def formatted_table(df: gpd.GeoDataFrame) -> pd.DataFrame:
+    """Retorna os campos originais, preservando a nomenclatura da base."""
     cols = [c for c in DISPLAY_COLUMNS if c in df.columns]
-    return df[cols].rename(columns=COLUMN_LABELS)
+    return df[cols].copy()
