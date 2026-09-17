@@ -428,7 +428,7 @@ def sidebar_filters(df):
             placeholder="Todas as UFs de concessão",
             key="f_uf",
             on_change=clear_filter_keys,
-            args=(["f_br", "f_fase", "f_status", "f_concessao", "f_empresa", "f_ano"],),
+            args=(["f_br", "f_fase", "f_status", "f_concessao", "f_empresa", "f_ano", "f_km", "f_search"],),
         )
         after_uf = apply_filters(df, ufs=ufs)
         brs = st.multiselect(
@@ -437,7 +437,7 @@ def sidebar_filters(df):
             placeholder="Todas as BRs",
             key="f_br",
             on_change=clear_filter_keys,
-            args=(["f_fase", "f_status", "f_concessao", "f_empresa", "f_ano"],),
+            args=(["f_fase", "f_status", "f_concessao", "f_empresa", "f_ano", "f_km", "f_search"],),
         )
     after_location = apply_filters(after_uf, brs=brs)
     with st.sidebar.expander("Situação", expanded=True):
@@ -447,7 +447,7 @@ def sidebar_filters(df):
             placeholder="Todas as fases",
             key="f_fase",
             on_change=clear_filter_keys,
-            args=(["f_status", "f_concessao", "f_empresa", "f_ano"],),
+            args=(["f_status", "f_concessao", "f_empresa", "f_ano", "f_km", "f_search"],),
         )
         after_fase = apply_filters(after_location, fases=fases)
         statuses = st.multiselect(
@@ -456,7 +456,7 @@ def sidebar_filters(df):
             placeholder="Todos os status",
             key="f_status",
             on_change=clear_filter_keys,
-            args=(["f_concessao", "f_empresa", "f_ano"],),
+            args=(["f_concessao", "f_empresa", "f_ano", "f_km", "f_search"],),
         )
     after_situacao = apply_filters(after_fase, statuses=statuses)
     with st.sidebar.expander("Concessão", expanded=False):
@@ -466,7 +466,7 @@ def sidebar_filters(df):
             placeholder="Todas",
             key="f_concessao",
             on_change=clear_filter_keys,
-            args=(["f_empresa", "f_ano"],),
+            args=(["f_empresa", "f_ano", "f_km", "f_search"],),
         )
         after_concessao = apply_filters(after_situacao, concessions=concessions)
         empresas = st.multiselect(
@@ -475,7 +475,7 @@ def sidebar_filters(df):
             placeholder="Todas",
             key="f_empresa",
             on_change=clear_filter_keys,
-            args=(["f_ano"],),
+            args=(["f_ano", "f_km", "f_search"],),
         )
     after_empresa = apply_filters(after_concessao, empresas=empresas)
     with st.sidebar.expander("Vencimento", expanded=False):
